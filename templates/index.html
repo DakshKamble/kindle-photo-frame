@@ -169,26 +169,24 @@
         document.getElementById('apply-btn').addEventListener('click', async () => {
             if (!cropper || !currentFilename) return;
 
-            const cropData = cropper.getData();
-            const imageData = cropper.getImageData();
+            // Use getCroppedCanvas to get the already cropped and rotated image
+            // This avoids all coordinate translation issues between Cropper.js and PIL
+            const canvas = cropper.getCroppedCanvas();
             
-            // Calculate crop as percentages of the rotated image
-            const crop = {
-                x: (cropData.x / imageData.naturalWidth) * 100,
-                y: (cropData.y / imageData.naturalHeight) * 100,
-                width: (cropData.width / imageData.naturalWidth) * 100,
-                height: (cropData.height / imageData.naturalHeight) * 100
-            };
+            if (!canvas) {
+                alert('Failed to get cropped image');
+                return;
+            }
 
             try {
+                // Convert canvas to blob and send as file
+                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+                const formData = new FormData();
+                formData.append('croppedImage', blob, 'cropped.png');
+
                 const response = await fetch('/process', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        filename: currentFilename,
-                        rotation: cropData.rotate || 0,
-                        crop: crop
-                    })
+                    body: formData
                 });
                 const data = await response.json();
 

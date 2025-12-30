@@ -64,51 +64,33 @@ def upload_file():
 
 @app.route('/process', methods=['POST'])
 def process_image():
-    data = request.json
-    filename = data.get('filename')
-    rotation = data.get('rotation', 0)
-    crop = data.get('crop')  # {x, y, width, height} in percentages
+    # Receive the already cropped and rotated image from Cropper.js
+    if 'croppedImage' not in request.files:
+        return jsonify({'error': 'No cropped image provided'}), 400
     
-    if not filename:
-        return jsonify({'error': 'No filename provided'}), 400
-    
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(filename))
-    if not os.path.exists(filepath):
-        return jsonify({'error': 'File not found'}), 404
+    file = request.files['croppedImage']
     
     try:
-        with Image.open(filepath) as img:
-            # Apply rotation first
-            if rotation != 0:
-                img = img.rotate(-rotation, expand=True)  # Negative because CSS rotation is clockwise
-            
-            # Apply crop if provided
-            if crop:
-                img_width, img_height = img.size
-                x = int(crop['x'] / 100 * img_width)
-                y = int(crop['y'] / 100 * img_height)
-                w = int(crop['width'] / 100 * img_width)
-                h = int(crop['height'] / 100 * img_height)
-                img = img.crop((x, y, x + w, y + h))
-            
-            # Convert to 8-bit grayscale for Kindle
-            img_grayscale = convert_to_kindle_format(img)
-            
-            # Save the processed image
-            output_path = os.path.join(app.config['OUTPUT_FOLDER'], 'frame.png')
-            img_grayscale.save(output_path, 'PNG')
-            
-            # Create preview
-            buffered = io.BytesIO()
-            img_grayscale.save(buffered, format="PNG")
-            img_base64 = base64.b64encode(buffered.getvalue()).decode()
-            
-            return jsonify({
-                'success': True,
-                'preview': f'data:image/png;base64,{img_base64}',
-                'width': img_grayscale.width,
-                'height': img_grayscale.height
-            })
+        img = Image.open(file.stream)
+        
+        # Convert to 8-bit grayscale for Kindle
+        img_grayscale = convert_to_kindle_format(img)
+        
+        # Save the processed image
+        output_path = os.path.join(app.config['OUTPUT_FOLDER'], 'frame.png')
+        img_grayscale.save(output_path, 'PNG')
+        
+        # Create preview
+        buffered = io.BytesIO()
+        img_grayscale.save(buffered, format="PNG")
+        img_base64 = base64.b64encode(buffered.getvalue()).decode()
+        
+        return jsonify({
+            'success': True,
+            'preview': f'data:image/png;base64,{img_base64}',
+            'width': img_grayscale.width,
+            'height': img_grayscale.height
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
