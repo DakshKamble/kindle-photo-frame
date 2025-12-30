@@ -2,10 +2,12 @@ import os
 import io
 import base64
 from flask import Flask, render_template, request, jsonify, send_file
+from flask_cors import CORS
 from PIL import Image
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
 app.config['OUTPUT_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output')
@@ -113,6 +115,10 @@ def serve_frame():
         return "No image available", 404
 
 if __name__ == '__main__':
+    # Add support for proxies like ngrok
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+    
     # Disable debug mode for production/ngrok use
     # Debug mode adds significant overhead and slows down requests
     app.run(host='0.0.0.0', port=8088, debug=False, threaded=True)
