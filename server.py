@@ -19,8 +19,13 @@ os.makedirs(app.config['OUTPUT_FOLDER'], exist_ok=True)
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+KINDLE_WIDTH = 600
+KINDLE_HEIGHT = 800
+
 def convert_to_kindle_format(image):
-    """Convert image to 8-bit grayscale PNG for Kindle e-ink display"""
+    """Convert image to 8-bit grayscale PNG for Kindle e-ink display (600x800)"""
+    # Resize to Kindle screen dimensions
+    image = image.resize((KINDLE_WIDTH, KINDLE_HEIGHT), Image.Resampling.LANCZOS)
     # Convert to grayscale (L mode = 8-bit grayscale)
     grayscale = image.convert('L')
     return grayscale
