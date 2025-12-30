@@ -78,13 +78,29 @@
                 <div id="preview-info" class="text-center text-gray-400 mb-4"></div>
                 <div class="bg-green-900/50 border border-green-700 rounded-lg p-4 text-center">
                     <p class="text-green-400 font-medium">✓ Image ready for Kindle!</p>
-                    <p class="text-gray-400 text-sm mt-1">Available at: <code class="bg-gray-700 px-2 py-1 rounded">http://YOUR_RPI_IP:8088/frame.png</code></p>
+                    <p class="text-gray-400 text-sm mt-1">Available at: <code id="frame-url" class="bg-gray-700 px-2 py-1 rounded">http://YOUR_RPI_IP:8088/frame.png</code></p>
                 </div>
             </div>
         </div>
     </div>
 
     <script>
+        // Enable detailed error logging
+        window.onerror = function(message, source, lineno, colno, error) {
+            console.error('Global error:', { message, source, lineno, colno, error });
+            return false;
+        };
+        
+        // Update frame URL to use current hostname (for ngrok compatibility)
+        document.addEventListener('DOMContentLoaded', function() {
+            const frameUrl = document.getElementById('frame-url');
+            if (frameUrl) {
+                const currentHost = window.location.host;
+                const protocol = window.location.protocol;
+                frameUrl.textContent = `${protocol}//${currentHost}/frame.png`;
+            }
+        });
+        
         let cropper = null;
         let currentFilename = null;
 
@@ -106,9 +122,29 @@
             try {
                 const response = await fetch('/upload', {
                     method: 'POST',
-                    body: formData
+                    body: formData,
+                    headers: {
+                        'Accept': 'application/json'
+                    }
                 });
-                const data = await response.json();
+                
+                if (!response.ok) {
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || `Server error: ${response.status}`);
+                    } else {
+                        throw new Error(`Server error: ${response.status}. The server did not return JSON.`);
+                    }
+                }
+                
+                let data;
+                try {
+                    data = await response.json();
+                } catch (jsonError) {
+                    console.error('JSON parse error:', jsonError);
+                    throw new Error(`Failed to parse JSON response: ${jsonError.message}`);
+                }
 
                 if (data.success) {
                     currentFilename = data.filename;
@@ -139,6 +175,7 @@
                     alert(data.error || 'Upload failed');
                 }
             } catch (err) {
+                console.error('Upload error:', err);
                 alert('Upload failed: ' + err.message);
             }
         });
@@ -186,9 +223,28 @@
 
                 const response = await fetch('/process', {
                     method: 'POST',
-                    body: formData
+                    body: formData,
+                    headers: {
+                        'Accept': 'application/json'
+                    }
                 });
-                const data = await response.json();
+                
+                if (!response.ok) {
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || `Server error: ${response.status}`);
+                    } else {
+                        throw new Error(`Server error: ${response.status}. The server did not return JSON.`);
+                    }
+                }
+                
+                let data;
+                try {
+                    data = await response.json();
+                } catch (jsonError) {
+                    throw new Error(`Failed to parse JSON response: ${jsonError.message}`);
+                }
 
                 if (data.success) {
                     previewImage.src = data.preview;
@@ -199,6 +255,7 @@
                     alert(data.error || 'Processing failed');
                 }
             } catch (err) {
+                console.error('Processing error:', err);
                 alert('Processing failed: ' + err.message);
             }
         });

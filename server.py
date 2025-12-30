@@ -8,9 +8,18 @@ from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
+
+# Configure app settings
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
 app.config['OUTPUT_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output')
+
+# Ensure all responses have the correct content type
+@app.after_request
+def add_header(response):
+    if request.path.startswith('/upload') or request.path.startswith('/process'):
+        response.headers['Content-Type'] = 'application/json'
+    return response
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'}
 
@@ -39,41 +48,45 @@ def index():
 @app.route('/upload', methods=['POST'])
 def upload_file():
     if 'file' not in request.files:
-        return jsonify({'error': 'No file part'}), 400
+        return jsonify({'error': 'No file part', 'success': False}), 400
     
     file = request.files['file']
     if file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
+        return jsonify({'error': 'No selected file', 'success': False}), 400
     
     if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
-        
-        # Open and get image info
-        with Image.open(filepath) as img:
-            width, height = img.size
-            # Convert to base64 for preview - use JPEG for smaller size
-            buffered = io.BytesIO()
-            img_rgb = img.convert('RGB')
-            img_rgb.save(buffered, format="JPEG", quality=85, optimize=True)
-            img_base64 = base64.b64encode(buffered.getvalue()).decode()
-        
-        return jsonify({
-            'success': True,
-            'filename': filename,
-            'width': width,
-            'height': height,
-            'preview': f'data:image/jpeg;base64,{img_base64}'
-        })
+        try:
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+            
+            # Open and get image info
+            with Image.open(filepath) as img:
+                width, height = img.size
+                # Convert to base64 for preview - use JPEG for smaller size
+                buffered = io.BytesIO()
+                img_rgb = img.convert('RGB')
+                img_rgb.save(buffered, format="JPEG", quality=85, optimize=True)
+                img_base64 = base64.b64encode(buffered.getvalue()).decode()
+            
+            return jsonify({
+                'success': True,
+                'filename': filename,
+                'width': width,
+                'height': height,
+                'preview': f'data:image/jpeg;base64,{img_base64}'
+            })
+        except Exception as e:
+            app.logger.error(f"Error processing upload: {str(e)}")
+            return jsonify({'error': str(e), 'success': False}), 500
     
-    return jsonify({'error': 'Invalid file type'}), 400
+    return jsonify({'error': 'Invalid file type', 'success': False}), 400
 
 @app.route('/process', methods=['POST'])
 def process_image():
     # Receive the already cropped and rotated image from Cropper.js
     if 'croppedImage' not in request.files:
-        return jsonify({'error': 'No cropped image provided'}), 400
+        return jsonify({'error': 'No cropped image provided', 'success': False}), 400
     
     file = request.files['croppedImage']
     
@@ -99,7 +112,8 @@ def process_image():
             'height': img_grayscale.height
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        app.logger.error(f"Error processing image: {str(e)}")
+        return jsonify({'error': str(e), 'success': False}), 500
 
 @app.route('/frame.png')
 def serve_frame():
