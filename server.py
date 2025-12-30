@@ -51,10 +51,10 @@ def upload_file():
         # Open and get image info
         with Image.open(filepath) as img:
             width, height = img.size
-            # Convert to base64 for preview
+            # Convert to base64 for preview - use JPEG for smaller size
             buffered = io.BytesIO()
             img_rgb = img.convert('RGB')
-            img_rgb.save(buffered, format="PNG")
+            img_rgb.save(buffered, format="JPEG", quality=85, optimize=True)
             img_base64 = base64.b64encode(buffered.getvalue()).decode()
         
         return jsonify({
@@ -62,7 +62,7 @@ def upload_file():
             'filename': filename,
             'width': width,
             'height': height,
-            'preview': f'data:image/png;base64,{img_base64}'
+            'preview': f'data:image/jpeg;base64,{img_base64}'
         })
     
     return jsonify({'error': 'Invalid file type'}), 400
@@ -81,18 +81,18 @@ def process_image():
         # Convert to 8-bit grayscale for Kindle
         img_grayscale = convert_to_kindle_format(img)
         
-        # Save the processed image
-        output_path = os.path.join(app.config['OUTPUT_FOLDER'], 'frame.png')
-        img_grayscale.save(output_path, 'PNG')
-        
-        # Create preview
+        # Create preview - use JPEG for smaller size
         buffered = io.BytesIO()
-        img_grayscale.save(buffered, format="PNG")
+        img_grayscale.save(buffered, format="JPEG", quality=85, optimize=True)
         img_base64 = base64.b64encode(buffered.getvalue()).decode()
+        
+        # Save the optimized PNG for Kindle
+        output_path = os.path.join(app.config['OUTPUT_FOLDER'], 'frame.png')
+        img_grayscale.save(output_path, format="PNG", optimize=True, compress_level=9)
         
         return jsonify({
             'success': True,
-            'preview': f'data:image/png;base64,{img_base64}',
+            'preview': f'data:image/jpeg;base64,{img_base64}',
             'width': img_grayscale.width,
             'height': img_grayscale.height
         })
@@ -104,10 +104,15 @@ def serve_frame():
     """Serve the processed image for Kindle to fetch"""
     output_path = os.path.join(app.config['OUTPUT_FOLDER'], 'frame.png')
     if os.path.exists(output_path):
-        return send_file(output_path, mimetype='image/png')
+        response = send_file(output_path, mimetype='image/png')
+        # Add cache control headers
+        response.headers['Cache-Control'] = 'public, max-age=300'  # Cache for 5 minutes
+        return response
     else:
         # Return a placeholder or 404
         return "No image available", 404
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8088, debug=True)
+    # Disable debug mode for production/ngrok use
+    # Debug mode adds significant overhead and slows down requests
+    app.run(host='0.0.0.0', port=8088, debug=False, threaded=True)
